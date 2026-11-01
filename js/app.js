@@ -9,6 +9,8 @@ class BC125ATApp {
     this.channels = [];
     this.selectedPort = null;
     this.currentEditingChannel = null;
+    this.customSearchSettings = [];
+    this.customSearchGroups = [];
     
     this.initializeElements();
     this.attachEventListeners();
@@ -40,6 +42,7 @@ class BC125ATApp {
       // Import/Export
       importCSVBtn: document.getElementById('importCSV'),
       exportCSVBtn: document.getElementById('exportCSV'),
+      customSearchBtn: document.getElementById('customSearch'),
       fileInput: document.getElementById('fileInput'),
       
       // Table and filtering
@@ -61,7 +64,14 @@ class BC125ATApp {
       editPriority: document.getElementById('editPriority'),
       saveChannelBtn: document.getElementById('saveChannel'),
       deleteChannelBtn: document.getElementById('deleteChannel'),
-      closeModalBtns: document.querySelectorAll('.close, .close-modal')
+      closeModalBtns: document.querySelectorAll('.close, .close-modal'),
+
+      // Custom Search Modal
+      customSearchModal: document.getElementById('customSearchModal'),
+      readCustomSearchBtn: document.getElementById('readCustomSearch'),
+      writeCustomSearchBtn: document.getElementById('writeCustomSearch'),
+      searchGroups: document.getElementById('searchGroups'),
+      customSearchTableBody: document.getElementById('customSearchTableBody')
     };
   }
 
@@ -81,7 +91,12 @@ class BC125ATApp {
     // Import/Export
     this.elements.importCSVBtn.addEventListener('click', () => this.elements.fileInput.click());
     this.elements.exportCSVBtn.addEventListener('click', () => this.exportToCSV());
+    this.elements.customSearchBtn.addEventListener('click', () => this.showCustomSearchModal());
     this.elements.fileInput.addEventListener('change', (e) => this.importFromCSV(e));
+    
+    // Custom Search
+    this.elements.readCustomSearchBtn.addEventListener('click', () => this.readCustomSearchSettings());
+    this.elements.writeCustomSearchBtn.addEventListener('click', () => this.writeCustomSearchSettings());
     
     // Filtering
     this.elements.channelFilter.addEventListener('input', () => this.filterChannels());
@@ -218,6 +233,7 @@ class BC125ATApp {
     this.elements.disconnectBtn.disabled = !connected;
     this.elements.readChannelsBtn.disabled = !connected;
     this.elements.programChannelsBtn.disabled = !connected || this.channels.length === 0;
+    this.elements.customSearchBtn.disabled = !connected;
     
     const status = this.elements.connectionStatus;
     status.textContent = connected ? 'Connected' : 'Disconnected';
@@ -875,6 +891,177 @@ class BC125ATApp {
     });
     
     return select;
+  }
+
+  /**
+   * Show Custom Search modal
+   */
+  showCustomSearchModal() {
+    this.elements.customSearchModal.style.display = 'block';
+    this.initializeCustomSearchUI();
+  }
+
+  /**
+   * Initialize Custom Search UI
+   */
+  initializeCustomSearchUI() {
+    // Initialize search groups checkboxes
+    this.elements.searchGroups.innerHTML = '';
+    for (let i = 1; i <= 10; i++) {
+      const groupItem = document.createElement('div');
+      groupItem.className = 'search-group-item';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = `searchGroup${i}`;
+      checkbox.value = i;
+      
+      const label = document.createElement('label');
+      label.htmlFor = `searchGroup${i}`;
+      label.textContent = `${i === 10 ? 0 : i}`; // Display 0 for index 10
+      
+      groupItem.appendChild(checkbox);
+      groupItem.appendChild(label);
+      this.elements.searchGroups.appendChild(groupItem);
+    }
+
+    // Initialize search ranges table
+    this.elements.customSearchTableBody.innerHTML = '';
+    for (let i = 1; i <= 10; i++) {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${i === 10 ? 0 : i}</td>
+        <td><input type="number" id="lowerLimit${i}" step="0.000001" min="25" max="512" value="25.000000"></td>
+        <td><input type="number" id="upperLimit${i}" step="0.000001" min="25" max="512" value="512.000000"></td>
+        <td><span class="search-status disabled">Disabled</span></td>
+      `;
+      this.elements.customSearchTableBody.appendChild(row);
+    }
+  }
+
+  /**
+   * Read Custom Search Settings from scanner
+   */
+  async readCustomSearchSettings() {
+    this.showProgress(true, 'Reading custom search settings...');
+    
+    try {
+      // Read search groups
+      this.customSearchGroups = await this.scanner.getCustomSearchGroup();
+      
+      // Read search ranges
+      this.customSearchSettings = await this.scanner.getAllCustomSearchSettings();
+      
+      this.displayCustomSearchSettings();
+      this.elements.writeCustomSearchBtn.disabled = false;
+      this.showStatus('Custom search settings read successfully', 'success');
+    } catch (error) {
+      console.error('Failed to read custom search settings:', error);
+      this.showStatus('Failed to read custom search settings: ' + error.message, 'error');
+    } finally {
+      this.showProgress(false);
+    }
+  }
+
+  /**
+   * Write Custom Search Settings to scanner
+   */
+  async writeCustomSearchSettings() {
+    if (!confirm('This will overwrite custom search settings on the scanner. Continue?')) {
+      return;
+    }
+
+    this.showProgress(true, 'Writing custom search settings...');
+    
+    try {
+      // Collect data from UI
+      const groups = this.collectCustomSearchGroups();
+      const settings = this.collectCustomSearchSettings();
+      
+      // Write to scanner
+      const groupSuccess = await this.scanner.setCustomSearchGroup(groups);
+      const settingsSuccess = await this.scanner.setAllCustomSearchSettings(settings);
+      
+      if (groupSuccess && settingsSuccess > 0) {
+        this.showStatus(`Custom search settings written successfully (${settingsSuccess}/10 ranges)`, 'success');
+      } else {
+        this.showStatus('Failed to write some custom search settings', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to write custom search settings:', error);
+      this.showStatus('Failed to write custom search settings: ' + error.message, 'error');
+    } finally {
+      this.showProgress(false);
+    }
+  }
+
+  /**
+   * Display Custom Search Settings in UI
+   */
+  displayCustomSearchSettings() {
+    // Update search groups
+    if (this.customSearchGroups) {
+      this.customSearchGroups.forEach(group => {
+        const checkbox = document.getElementById(`searchGroup${group.index}`);
+        if (checkbox) {
+          checkbox.checked = group.enabled;
+        }
+      });
+    }
+
+    // Update search ranges
+    if (this.customSearchSettings) {
+      this.customSearchSettings.forEach(setting => {
+        const lowerInput = document.getElementById(`lowerLimit${setting.index}`);
+        const upperInput = document.getElementById(`upperLimit${setting.index}`);
+        const statusSpan = document.querySelector(`#customSearchTableBody tr:nth-child(${setting.index}) .search-status`);
+        
+        if (lowerInput) lowerInput.value = setting.lowerLimit.toFixed(6);
+        if (upperInput) upperInput.value = setting.upperLimit.toFixed(6);
+        
+        // Update status based on group setting
+        const group = this.customSearchGroups?.find(g => g.index === setting.index);
+        const isEnabled = group ? group.enabled : false;
+        
+        if (statusSpan) {
+          statusSpan.textContent = isEnabled ? 'Enabled' : 'Disabled';
+          statusSpan.className = `search-status ${isEnabled ? 'enabled' : 'disabled'}`;
+        }
+      });
+    }
+  }
+
+  /**
+   * Collect Custom Search Groups from UI
+   */
+  collectCustomSearchGroups() {
+    const groups = [];
+    for (let i = 1; i <= 10; i++) {
+      const checkbox = document.getElementById(`searchGroup${i}`);
+      groups.push({
+        index: i,
+        enabled: checkbox ? checkbox.checked : false
+      });
+    }
+    return groups;
+  }
+
+  /**
+   * Collect Custom Search Settings from UI
+   */
+  collectCustomSearchSettings() {
+    const settings = [];
+    for (let i = 1; i <= 10; i++) {
+      const lowerInput = document.getElementById(`lowerLimit${i}`);
+      const upperInput = document.getElementById(`upperLimit${i}`);
+      
+      settings.push({
+        index: i,
+        lowerLimit: parseFloat(lowerInput?.value || 25.0),
+        upperLimit: parseFloat(upperInput?.value || 512.0)
+      });
+    }
+    return settings;
   }
 }
 

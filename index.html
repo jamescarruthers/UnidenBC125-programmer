@@ -39,6 +39,7 @@
                 <div class="right-controls">
                     <button id="importCSV" class="btn btn-secondary">Import CSV</button>
                     <button id="exportCSV" class="btn btn-secondary" disabled>Export CSV</button>
+                    <button id="customSearch" class="btn btn-secondary" disabled>Custom Search</button>
                     <input type="file" id="fileInput" accept=".csv" style="display: none;">
                 </div>
             </div>
@@ -137,6 +138,51 @@
                 <button type="button" id="saveChannel" class="btn btn-primary">Save</button>
                 <button type="button" id="deleteChannel" class="btn btn-danger">Delete</button>
                 <button type="button" class="btn btn-secondary close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Search Modal -->
+    <div id="customSearchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Custom Search Settings</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="search-controls">
+                    <button id="readCustomSearch" class="btn btn-primary">Read from Scanner</button>
+                    <button id="writeCustomSearch" class="btn btn-warning" disabled>Write to Scanner</button>
+                </div>
+                
+                <div class="search-groups-section">
+                    <h4>Search Groups (Enable/Disable)</h4>
+                    <div id="searchGroups" class="search-groups">
+                        <!-- Search group checkboxes will be populated here -->
+                    </div>
+                </div>
+
+                <div class="search-ranges-section">
+                    <h4>Custom Search Ranges</h4>
+                    <div class="table-container">
+                        <table id="customSearchTable" class="search-table">
+                            <thead>
+                                <tr>
+                                    <th>Range</th>
+                                    <th>Lower Limit (MHz)</th>
+                                    <th>Upper Limit (MHz)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customSearchTableBody">
+                                <!-- Search ranges will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary close-modal">Close</button>
             </div>
         </div>
     </div>

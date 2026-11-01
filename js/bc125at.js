@@ -238,6 +238,127 @@ class BC125AT {
   }
 
   /**
+   * Get Custom Search Group Settings
+   */
+  async getCustomSearchGroup() {
+    if (!this.programMode) {
+      throw new Error('Must be in program mode to access custom search group');
+    }
+
+    const response = await this.sendCommand('CSG');
+    const parts = response.split(',');
+    if (parts.length >= 2 && parts[0] === 'CSG') {
+      const groupString = parts[1];
+      return this.parseSearchGroupString(groupString);
+    }
+    return null;
+  }
+
+  /**
+   * Set Custom Search Group Settings
+   */
+  async setCustomSearchGroup(groupSettings) {
+    if (!this.programMode) {
+      throw new Error('Must be in program mode to set custom search group');
+    }
+
+    const groupString = this.formatSearchGroupString(groupSettings);
+    const response = await this.sendCommand(`CSG,${groupString}`);
+    return response === 'CSG,OK';
+  }
+
+  /**
+   * Get Custom Search Settings for a specific range
+   */
+  async getCustomSearchSettings(searchIndex) {
+    if (!this.programMode) {
+      throw new Error('Must be in program mode to access custom search settings');
+    }
+
+    if (searchIndex < 1 || searchIndex > 10) {
+      throw new Error('Search index must be between 1 and 10');
+    }
+
+    const response = await this.sendCommand(`CSP,${searchIndex}`);
+    const parts = response.split(',');
+    if (parts.length >= 4 && parts[0] === 'CSP') {
+      return {
+        index: parseInt(parts[1]),
+        lowerLimit: this.parseFrequency(parts[2]),
+        upperLimit: this.parseFrequency(parts[3])
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Set Custom Search Settings for a specific range
+   */
+  async setCustomSearchSettings(searchIndex, lowerLimit, upperLimit) {
+    if (!this.programMode) {
+      throw new Error('Must be in program mode to set custom search settings');
+    }
+
+    if (searchIndex < 1 || searchIndex > 10) {
+      throw new Error('Search index must be between 1 and 10');
+    }
+
+    const lowerHz = this.formatFrequency(lowerLimit);
+    const upperHz = this.formatFrequency(upperLimit);
+    
+    const response = await this.sendCommand(`CSP,${searchIndex},${lowerHz},${upperHz}`);
+    return response === 'CSP,OK';
+  }
+
+  /**
+   * Get all Custom Search Settings
+   */
+  async getAllCustomSearchSettings() {
+    const settings = [];
+    
+    for (let i = 1; i <= 10; i++) {
+      try {
+        const setting = await this.getCustomSearchSettings(i);
+        if (setting) {
+          settings.push(setting);
+        }
+      } catch (error) {
+        console.error(`Failed to get custom search setting ${i}:`, error);
+        // Add empty setting to maintain index consistency
+        settings.push({
+          index: i,
+          lowerLimit: 25.0,
+          upperLimit: 512.0
+        });
+      }
+    }
+    
+    return settings;
+  }
+
+  /**
+   * Set all Custom Search Settings
+   */
+  async setAllCustomSearchSettings(settings) {
+    let successCount = 0;
+    
+    for (const setting of settings) {
+      try {
+        const success = await this.setCustomSearchSettings(
+          setting.index,
+          setting.lowerLimit,
+          setting.upperLimit
+        );
+        if (success) successCount++;
+      } catch (error) {
+        console.error(`Failed to set custom search setting ${setting.index}:`, error);
+      }
+    }
+    
+    return successCount;
+  }
+
+  /**
    * Parse channel response from scanner
    */
   parseChannelResponse(response) {
@@ -372,6 +493,34 @@ class BC125AT {
       224: '703', 225: '712', 226: '723', 227: '731', 228: '732', 229: '734',
       230: '743', 231: '754'
     };
+  }
+
+  /**
+   * Parse search group string (10 digits of 0s and 1s)
+   */
+  parseSearchGroupString(groupString) {
+    if (groupString.length !== 10) return null;
+    
+    const groups = [];
+    for (let i = 0; i < 10; i++) {
+      groups.push({
+        index: i + 1,
+        enabled: groupString[i] === '0' // 0 = valid/enabled, 1 = invalid/disabled
+      });
+    }
+    return groups;
+  }
+
+  /**
+   * Format search group settings to string
+   */
+  formatSearchGroupString(groupSettings) {
+    let groupString = '';
+    for (let i = 1; i <= 10; i++) {
+      const group = groupSettings.find(g => g.index === i);
+      groupString += (group && group.enabled) ? '0' : '1';
+    }
+    return groupString;
   }
 }
 

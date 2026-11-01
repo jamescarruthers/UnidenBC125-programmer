@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Talk to a Uniden UBC125XLT on macOS.
+
+The scanner's USB descriptors have no CDC functional descriptors, so Apple's
+ACM driver never creates a /dev/cu.* port. This talks to the bulk endpoints
+directly with libusb.
+
+  ubc125 MDL VER      send commands, print replies
+  ubc125              interactive prompt
+  ubc125 --bridge     virtual serial port, a link named "port" next to this
+                      script (Ctrl-C to stop)
+
+Only one of these can use the scanner at a time.
+"""
+import os, select, sys, termios, threading, time, tty
+import libusb_package, usb.backend.libusb1, usb.core, usb.util
+
+VID, PID = 0x1965, 0x0018
+CTRL_IF, DATA_IF = 0, 1
+EP_OUT, EP_IN = 0x02, 0x81
+PORT_LINK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "port")
+
+
+def open_scanner():
+    backend = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
+    dev = usb.core.find(idVendor=VID, idProduct=PID, backend=backend)
+    if dev is None:
+        sys.exit("UBC125XLT not found: check the cable and that the scanner is on.")
+    try:
+        usb.util.claim_interface(dev, DATA_IF)
+    except usb.core.USBError as e:
+        sys.exit(f"Can't claim the scanner (is another ubc125 running?): {e}")
+    dev.ctrl_transfer(0x21, 0x20, 0, CTRL_IF, bytes([0x00, 0xC2, 0x01, 0x00, 0, 0, 8]))  # 115200 8N1
+    dev.ctrl_transfer(0x21, 0x22, 3, CTRL_IF)  # DTR + RTS
+    while read_chunk(dev, 50):  # discard anything stale
+        pass
+    return dev
+
+
+def read_chunk(dev, timeout_ms):
+    try:
+        return bytes(dev.read(EP_IN, 64, timeout_ms))
+    except usb.core.USBTimeoutError:
+        return b""
+
+
+def transact(dev, command, timeout=1.5):
+    dev.write(EP_OUT, command.strip().encode("ascii") + b"\r", 1000)
+    reply, deadline = b"", time.monotonic() + timeout
+    while not reply.endswith(b"\r") and time.monotonic() < deadline:
+        reply += read_chunk(dev, 200)
+    return reply.decode("ascii", "replace").strip() or "(no reply)"
+
+
+def bridge(dev):
+    master, slave = os.openpty()
+    tty.setraw(slave, termios.TCSANOW)
+    if os.path.lexists(PORT_LINK):
+        os.unlink(PORT_LINK)
+    os.symlink(os.ttyname(slave), PORT_LINK)
+    print(f"Serial port ready: {PORT_LINK} -> {os.ttyname(slave)}", flush=True)
+
+    stop = threading.Event()
+
+    def usb_to_pty():
+        while not stop.is_set():
+            data = read_chunk(dev, 200)
+            if data:
+                os.write(master, data)
+
+    reader = threading.Thread(target=usb_to_pty, daemon=True)
+    reader.start()
+    try:
+        while True:
+            if select.select([master], [], [], 0.5)[0]:
+                dev.write(EP_OUT, os.read(master, 256), 1000)
+    finally:
+        stop.set()
+        reader.join()
+        os.unlink(PORT_LINK)
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] in (["-h"], ["--help"]):
+        print(__doc__)
+        return
+    dev = open_scanner()
+    try:
+        if args == ["--bridge"]:
+            bridge(dev)
+        elif args:
+            for command in args:
+                print(transact(dev, command))
+        else:
+            while True:
+                command = input("ubc125> ").strip()
+                if command:
+                    print(transact(dev, command))
+    except (KeyboardInterrupt, EOFError):
+        print()
+    finally:
+        usb.util.release_interface(dev, DATA_IF)
+
+
+if __name__ == "__main__":
+    main()
