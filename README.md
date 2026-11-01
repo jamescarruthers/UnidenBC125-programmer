@@ -50,7 +50,7 @@ npm run serve
 
 ### Initial Connection
 
-1. **Select COM Port**: Click "Select COM Port" to choose the serial port your scanner is connected to
+1. **Select your scanner**: Click "Select COM Port" to choose the serial port your scanner is connected to. For a UBC125XLT on macOS, click "Select USB Device" instead, because macOS creates no serial port for it
 2. **Connect**: Click "Connect" to establish communication with the scanner
 3. The application will automatically enter Program Mode and display the scanner's model and firmware version
 

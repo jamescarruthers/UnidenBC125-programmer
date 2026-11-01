@@ -67,6 +67,7 @@ Serial port ready: /path/to/ubc125/port -> /dev/ttys007
 The port is a link named `port`, next to the script. It works until you press Ctrl-C.
 
 - Enter the path to `port` by hand. It isn't in `/dev/cu.*`, so it won't appear in an app's port list.
+- Web Serial pages can't use this port. For this repository's web page, use **Select USB Device** instead, and stop the bridge first.
 - Use the `port` path, not the `/dev/ttys…` address. That address can change each time you start the bridge.
 - Commands must end with a carriage return (`\r`).
 

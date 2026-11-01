@@ -25,6 +25,7 @@ class BC125ATApp {
     this.elements = {
       // Connection controls
       selectPortBtn: document.getElementById('selectPort'),
+      selectUsbBtn: document.getElementById('selectUsb'),
       connectBtn: document.getElementById('connect'),
       disconnectBtn: document.getElementById('disconnect'),
       connectionStatus: document.getElementById('connectionStatus'),
@@ -81,6 +82,7 @@ class BC125ATApp {
   attachEventListeners() {
     // Connection events
     this.elements.selectPortBtn.addEventListener('click', () => this.selectPort());
+    this.elements.selectUsbBtn.addEventListener('click', () => this.selectUsbDevice());
     this.elements.connectBtn.addEventListener('click', () => this.connect());
     this.elements.disconnectBtn.addEventListener('click', () => this.disconnect());
     
@@ -127,6 +129,7 @@ class BC125ATApp {
       alert('Web Serial API is not supported in this browser. Please use Chrome, Edge, or another Chromium-based browser.');
       this.elements.selectPortBtn.disabled = true;
     }
+    this.elements.selectUsbBtn.disabled = !('usb' in navigator);
   }
 
   /**
@@ -163,6 +166,20 @@ class BC125ATApp {
     } catch (error) {
       console.error('Port selection failed:', error);
       this.showStatus('Port selection cancelled', 'error');
+    }
+  }
+
+  /**
+   * Select a UBC125XLT over WebUSB, for systems with no serial port for it
+   */
+  async selectUsbDevice() {
+    try {
+      this.selectedPort = await UsbSerialPort.request();
+      this.elements.connectBtn.disabled = false;
+      this.showStatus('USB device selected', 'info');
+    } catch (error) {
+      console.error('USB device selection failed:', error);
+      this.showStatus('USB device selection cancelled', 'error');
     }
   }
 
